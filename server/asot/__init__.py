@@ -13,7 +13,7 @@ from tomlkit import parse
 
 from .errors import APIError
 
-from .bp import index
+from .bp import index, gateway, control
 
 
 log = logging.getLogger(__name__)
@@ -35,6 +35,8 @@ def setup_blueprints(app: quart.Quart) -> None:
     # use a non-empty string to load the blueprint under /api<your string>
     blueprint_list = [
         (index, None),
+        (gateway, None),
+        (control, ""),
     ]
 
     for blueprint, api_prefix in blueprint_list:

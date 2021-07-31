@@ -4,5 +4,7 @@
 
 
 from .index import bp as index
+from .gateway import bp as gateway
+from .control import bp as control
 
-__all__ = ("index",)
+__all__ = ("index", "gateway", "control")
