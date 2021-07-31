@@ -141,4 +141,4 @@ cython_debug/
 config.toml
 
 # asot db
-./asot.sqlite3.db
+asot.sqlite3.db
