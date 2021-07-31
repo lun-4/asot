@@ -12,6 +12,7 @@ quart-schema = "^0.10.0"
 tomlkit = "^0.7.2"
 aiosqlite = "^0.17.0"
 agnostic = {extras = ["sqlite"], version = "^1.0.2"}
+violet = {git = "https://gitlab.com/elixire/violet"}
 
 [tool.poetry.dev-dependencies]
 
