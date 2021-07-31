@@ -1,0 +1,28 @@
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache"
+
+server_tests:
+  image: python:3.9-buster
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - .cache/
+      - /var/cache/apk
+  before_script:
+    - cd server
+    - rm -rf .tox
+    - time apt update
+    - time apt install -y build-essential sqlite3
+    - python -V
+    - pip -V
+    - python3 -V
+    - pip3 -V
+    - time pip3 install wheel tox
+    - cat config.ci.toml > config.toml
+    - cat config.toml
+  script:
+    - cd server
+    - ls -la
+    - pwd
+    - time psql -h postgres -U postgres -f schema.sql
+    - time tox
