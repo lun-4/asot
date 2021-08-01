@@ -270,4 +270,4 @@ async def control():
         await websocket.close(code=close.code, reason=close.reason)
     except Exception as exc:
         log.exception("error on websocket handling")
-        await websocket.send(4000, reason=repr(exc))
+        await websocket.close(4000, reason=repr(exc))
