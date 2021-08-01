@@ -16,19 +16,28 @@ bp = Blueprint("gateway", __name__)
 @bp.before_app_request
 async def on_request():
     request_host = request.headers["host"]
-    api_host = app.cfg["asot"]["api_host"]
+    api_domain = app.cfg["asot"]["api_domain"]
 
-    if request_host == api_host:
+    # if its an exact match, follow thru to api
+    # if not, its possibly a domain reroute to someone's tunnel
+    if request_host == api_domain:
         return
 
-    return await reroute()
+    # urls pointing to tunnels are in the format [sesion_id].[api_host]
+    # like this:
+    #  https://1fh451v.asot.site
+
+    if not request_host.endswith(api_domain):
+        return "invalid asot domain", 400
+
+    session_id, *_rest = request_host.split(".")
+    return await reroute(session_id)
 
 
-async def reroute():
+async def reroute(session_id):
     # once we get a reroute, create a request on the session manager,
     # it will dispatch to the queue, and then we wait for a response
-    session_id = "asd"
-    request_id, event = app.sessions.send_request(session_id)
+    request_id = await app.sessions.send_request(session_id)
     req = app.sessions.requests[request_id]
     # TODO timeouts, clean it all up afterwards
     await req.response_event.wait()
