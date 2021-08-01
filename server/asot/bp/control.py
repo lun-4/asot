@@ -1,6 +1,6 @@
-# bbv: Server component for bigbigvpn
-# Copyright 2021, Team bigbigvpn and bbv contributors
-# SPDX-License-Identifier: AGPL-3.0-only
+# asot: Localhost tunneling
+# Copyright 2021, Luna and asot contributors
+# SPDX-License-Identifier: BSD-3-Clause
 
 import json
 import asyncio
@@ -14,18 +14,26 @@ from quart import Blueprint, websocket, current_app as app, g
 import violet.fail_modes
 
 from asot.models import User
-from asot.errors import FailedAuth
-from asot.enums.messages import (
-    CommandType,
-    OperationType,
-    NotifyType,
-    RunningVPNMessageType,
-    CloseCodes,
-)
 
-
-bp = Blueprint(__name__, "control")
+bp = Blueprint("control", __name__)
 log = logging.getLogger(__name__)
+
+
+class CloseCodes:
+    ERROR = 4000
+    FAILED_AUTH = 4001
+    HEARTBEAT_EXPIRE = 4002
+    INVALID_JSON = 4003
+    INVALID_MESSAGE = 4004
+
+
+class OperationType(Enum):
+    LOGIN = 1
+    WELCOME = 2
+    HEARTBEAT = 3
+    HEARTBEAT_ACK = 4
+    HTTP_REQUEST = 5
+    HTTP_RESPONSE = 6
 
 
 async def receive_any():
@@ -63,15 +71,6 @@ async def send_op(op: OperationType, data: dict):
     await websocket.send(json.dumps(message))
 
 
-async def send_dispatch(cmd: CommandType, data: dict):
-    message = {
-        "op": OperationType.COMMAND.value,
-        "d": {"t": cmd.value, "v": data},
-    }
-    log.debug("sending: %r", message)
-    await websocket.send(json.dumps(message))
-
-
 @dataclass
 class WebsocketClose(Exception):
     code: int
@@ -84,17 +83,17 @@ class WebsocketFailMode(violet.fail_modes.FailMode):
     def __init__(self):
         pass
 
-    async def handle(self, job, exc, _state) -> bool:
+    async def handle(self, job, exc, state) -> bool:
         if isinstance(exc, WebsocketClose):
             raise exc
         else:
-            await violet.fail_modes.LogOnly().handle(job, exc, _state)
+            await violet.fail_modes.LogOnly().handle(job, exc, state)
 
 
 async def do_login():
     await websocket.accept()
-    login = await recv_op(OperationType.LOGIN, LOGIN_SCHEMA)
-    user_id = hello["user_id"]
+    login = await recv_op(OperationType.LOGIN)
+    user_id = login["user_id"]
 
     try:
         user = await User.fetch(user_id)
@@ -194,9 +193,8 @@ async def queue_processor(vpn):
         log.info("got control message %r", control_message)
         dispatch_type, data = control_message
 
-        if dispatch_type == RunningVPNMessageType.COMMAND:
-            command_type, command_data = data
-            await send_dispatch(command_type, command_data)
+        # TODO impl internal control messages
+
         queue.task_done()
 
 
@@ -231,7 +229,7 @@ async def heartbeat(state):
                 pass
 
 
-async def process_single_message(state, message):
+async def process_incoming_message(state, message):
     try:
         opcode = OperationType(message["op"])
     except ValueError:
@@ -240,16 +238,8 @@ async def process_single_message(state, message):
     if opcode == OperationType.HEARTBEAT_ACK:
         if state.heartbeat_wait_task is not None:
             state.heartbeat_wait_task.cancel()
-    elif opcode == OperationType.NOTIFY:
-        notify_type = NotifyType(message["d"]["t"])
-
-        # for now, since we have only a single notification, data is basically
-        # nothing
-        # notify_data = message["d"]["v"]
-
-        if notify_type == NotifyType.NO_CLIENTS:
-            log.info("vpn %r signaled it has no clients. destroying vpn", state.vpn)
-            await state.vpn.delete()
+    elif opcode == OperationType.HTTP_RESPONSE:
+        # TODO
     else:
         raise WebsocketClose(CloseCodes.INVALID_MESSAGE, "Invalid opcode value")
 
@@ -259,7 +249,7 @@ async def receiver_worker(state):
         message = await receive_any()
 
         try:
-            await process_single_message(state, message)
+            await process_incoming_message(state, message)
         except WebsocketClose as exc:
             raise exc
         except Exception as exc:
