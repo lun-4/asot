@@ -29,7 +29,7 @@ class User:
             FROM asot_users
             WHERE id = $1
             """,
-            user_id,
+            (user_id,),
         ) as cursor:
             return User.from_row(await cursor.fetchone())
 

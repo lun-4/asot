@@ -95,10 +95,9 @@ async def do_login():
     login = await recv_op(OperationType.LOGIN)
     user_id = login["user_id"]
 
-    try:
-        user = await User.fetch(user_id)
-    except FailedAuth as exc:
-        raise WebsocketClose(CloseCodes.FAILED_AUTH, exc.get_message())
+    user = await User.fetch(user_id)
+    if user is None:
+        raise WebsocketClose(CloseCodes.FAILED_AUTH, "unknown user")
 
     g.state = WebsocketConnectionState(user, None)
     await send_op(OperationType.WELCOME, None)
