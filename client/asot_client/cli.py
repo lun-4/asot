@@ -2,6 +2,7 @@
 # Copyright 2021, Luna and asot contributors
 # SPDX-License-Identifier: BSD-3-Clause
 import sys
+import base64
 import argparse
 import logging
 import asyncio
@@ -74,17 +75,20 @@ async def async_main():
                 headers = data["headers"]
                 # TODO body
                 resp = await api.httpx.get(
-                    f"http://localhost:{port}{path}", headers=headers
+                    f"http://localhost:{args.port}{path}", headers=headers
                 )
+                body = base64.b64encode(resp.content).decode()
                 await send_json(
                     websocket,
                     {
                         "op": 6,
                         "d": {
                             "request_id": data["request_id"],
-                            "status_code": resp.status_code,
-                            "headers": dict(resp.headers),
-                            "content": await resp.content,
+                            "response": {
+                                "status_code": resp.status_code,
+                                "headers": dict(resp.headers),
+                                "content": body,
+                            },
                         },
                     },
                 )
