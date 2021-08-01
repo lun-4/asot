@@ -10,6 +10,7 @@ import quart
 import aiosqlite
 from quart import jsonify
 from tomlkit import parse
+from violet import JobScheduler
 
 from .errors import APIError
 
@@ -59,6 +60,7 @@ app = create_app()
 async def app_before_serving():
     log.info("opening db")
     app.db = await aiosqlite.connect(app.cfg["database"]["filepath"])
+    app.sched = JobManager()
 
 
 @app.after_serving
@@ -66,6 +68,7 @@ async def close_db():
     """Close all database connections."""
     log.info("closing db")
     await app.db.close()
+    await app.sched.stop_all(wait=True, timeout=60)
 
 
 @app.errorhandler(404)
