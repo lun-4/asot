@@ -98,8 +98,9 @@ async def do_login():
     if user is None:
         raise WebsocketClose(CloseCodes.FAILED_AUTH, "unknown user")
 
+    session_id = app.sessions.add_client(user)
     g.state = WebsocketConnectionState(user, None)
-    await send_op(OperationType.WELCOME, None)
+    await send_op(OperationType.WELCOME, {"session_id": session_id})
 
 
 @dataclass
@@ -134,20 +135,20 @@ async def do_main_loop():
     tasks = [
         app.sched.spawn(
             queue_processor,
-            [g.vpn],
-            name=f"queue_worker:{g.vpn.id}",
+            [g.state],
+            name=f"queue_worker:{user.id}",
             fail_mode=WebsocketFailMode(),
         ),
         app.sched.spawn(
             receiver_worker,
             [g.state],
-            name=f"receiver_worker:{g.vpn.id}",
+            name=f"receiver_worker:{user.id}",
             fail_mode=WebsocketFailMode(),
         ),
         app.sched.spawn(
             heartbeat,
             [g.state],
-            name=f"heartbeat:{g.vpn.id}",
+            name=f"heartbeat:{user.id}",
             fail_mode=WebsocketFailMode(),
         ),
     ]
@@ -158,7 +159,7 @@ async def do_main_loop():
         done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_EXCEPTION)
         log.info(
             "unexpected websocket task finish for user %s. %d done %d pending",
-            g.vpn.id,
+            user.id,
             len(done),
             len(pending),
         )
@@ -181,10 +182,10 @@ class ControlMessageType(Enum):
     SEND = 0
 
 
-async def queue_processor(vpn):
+async def queue_processor(state):
     while True:
-        running_state = app.running_vpns.vpns[vpn.id]
-        queue = running_state.queue
+        session = app.sessions.get_by_user(state.user.id)
+        queue = session.queue
 
         assert queue is not None
         control_message = await queue.get()
@@ -192,6 +193,17 @@ async def queue_processor(vpn):
         dispatch_type, data = control_message
 
         # TODO impl internal control messages
+        if dispatch_type == 1:
+            request_id = data
+            req = app.sessions.requests[request_id]
+            await send_op(
+                OperationType.HTTP_REQUEST,
+                {
+                    "path": req.path,
+                    "headers": req.headers,
+                    "body": req.body,
+                },
+            )
 
         queue.task_done()
 
@@ -217,7 +229,7 @@ async def heartbeat(state):
         # must exist waiting for the ack.
         if state.heartbeat_wait_task is not None:
             state.heartbeat_wait_task = app.sched.spawn(
-                heartbeat_wait_ack, [], name=f"heartbeat_wait:{state.vpn.id}"
+                heartbeat_wait_ack, [], name=f"heartbeat_wait:{state.user.id}"
             )
 
             try:
@@ -237,8 +249,10 @@ async def process_incoming_message(state, message):
         if state.heartbeat_wait_task is not None:
             state.heartbeat_wait_task.cancel()
     elif opcode == OperationType.HTTP_RESPONSE:
-        # TODO
-        pass
+        data = message["d"]
+        # TODO handle keyerror (request timed out and client attempts to reply)
+        app.sessions.requests[data["request_id"]].response = data["response"]
+        app.sessions.requests[data["request_id"]].response_event.set()
     else:
         raise WebsocketClose(CloseCodes.INVALID_MESSAGE, "Invalid opcode value")
 

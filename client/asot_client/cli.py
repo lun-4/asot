@@ -33,11 +33,13 @@ class APIClient:
 
 
 async def send_json(ws, obj):
+    log.info("ws: sending %r", obj)
     await ws.send(json.dumps(obj))
 
 
 async def recv_json(ws):
     msg = await ws.recv()
+    log.info("ws: received %r", msg)
     return json.loads(msg)
 
 
@@ -70,7 +72,7 @@ async def async_main():
                 data = reply["d"]
                 path = data["path"]
                 headers = data["headers"]
-                # TODO body etc
+                # TODO body
                 resp = await api.httpx.get(
                     f"http://localhost:{port}{path}", headers=headers
                 )

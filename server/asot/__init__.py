@@ -15,6 +15,7 @@ from violet import JobManager
 from .errors import APIError
 
 from .bp import index, gateway, control
+from .gateway_state import SessionManager
 
 
 log = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ async def app_before_serving():
     log.info("opening db")
     app.db = await aiosqlite.connect(app.cfg["database"]["filepath"])
     app.sched = JobManager()
+    app.sessions = SessionManager()
 
 
 @app.after_serving
