@@ -199,6 +199,7 @@ async def queue_processor(state):
             await send_op(
                 OperationType.HTTP_REQUEST,
                 {
+                    "request_id": request_id,
                     "path": req.path,
                     "headers": req.headers,
                     "body": req.body,
