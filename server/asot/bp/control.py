@@ -5,7 +5,6 @@
 import json
 import asyncio
 import logging
-import uuid
 from enum import Enum
 from typing import Optional
 from dataclasses import dataclass
