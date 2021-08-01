@@ -3,7 +3,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 
-import uuid
 import secrets
 from typing import Optional
 from dataclasses import dataclass
@@ -13,7 +12,7 @@ from quart import current_app as app
 
 @dataclass
 class User:
-    id: uuid.UUID
+    id: str
     username: str
     email: str
 
@@ -22,7 +21,7 @@ class User:
         return User(**row) if row is not None else None
 
     @classmethod
-    async def fetch(_cls, user_id: uuid.UUID) -> Optional["User"]:
+    async def fetch(_cls, user_id: str) -> Optional["User"]:
         async with app.db.execute(
             """
             SELECT
