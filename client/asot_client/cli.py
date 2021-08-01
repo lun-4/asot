@@ -8,6 +8,7 @@ import asyncio
 import json
 
 import httpx
+import websockets
 
 log = logging.getLogger(__name__)
 
@@ -57,7 +58,10 @@ async def async_main():
     # user = await api.get_user(args.user_id)
     # print(user)
 
-    async with websockets.connect(uri) as websocket:
+    # TODO: parse given server url so we can change scheme in a safer manner
+    async with websockets.connect(
+        f"{api.server_url}/control".replace("http", "ws")
+    ) as websocket:
         await send_json(websocket, {"op": 1, "d": {"user_id": user_id}})
         reply = await recv_json(websocket)
         assert reply["op"] == 2
