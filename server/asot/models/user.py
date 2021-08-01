@@ -8,6 +8,8 @@ import secrets
 from typing import Optional
 from dataclasses import dataclass
 
+from quart import current_app as app
+
 
 @dataclass
 class User:
