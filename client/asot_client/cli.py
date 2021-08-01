@@ -54,8 +54,8 @@ async def async_main():
     print(args)
 
     api = APIClient(args.server_url)
-    user = await api.get_user(args.user_id)
-    print(user)
+    # user = await api.get_user(args.user_id)
+    # print(user)
 
     async with websockets.connect(uri) as websocket:
         await send_json(websocket, {"op": 1, "d": {"user_id": user_id}})

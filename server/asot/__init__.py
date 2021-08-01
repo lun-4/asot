@@ -10,7 +10,7 @@ import quart
 import aiosqlite
 from quart import jsonify
 from tomlkit import parse
-from violet import JobScheduler
+from violet import JobManager
 
 from .errors import APIError
 

@@ -240,6 +240,7 @@ async def process_incoming_message(state, message):
             state.heartbeat_wait_task.cancel()
     elif opcode == OperationType.HTTP_RESPONSE:
         # TODO
+        pass
     else:
         raise WebsocketClose(CloseCodes.INVALID_MESSAGE, "Invalid opcode value")
 
