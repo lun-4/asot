@@ -1,2 +1,5 @@
+[asot]
+api_host="http://localhost:8000"
+
 [database]
 filepath="./asot.sqlite3.db"
