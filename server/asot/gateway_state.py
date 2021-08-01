@@ -52,7 +52,7 @@ class SessionManager:
 
         request_id = secrets.token_hex(32)
         response_event = asyncio.Event()
-        body: str = base64.b64encode(await request.read()).decode()
+        body: str = base64.b64encode(await request.get_data()).decode()
         self.requests[request_id] = IncomingRequest(
             request.path,
             dict(request.headers),
