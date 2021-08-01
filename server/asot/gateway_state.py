@@ -65,7 +65,7 @@ class SessionManager:
         await sess.queue.put(
             (
                 1,
-                (request_id,),
+                request_id,
             )
         )
         return request_id
