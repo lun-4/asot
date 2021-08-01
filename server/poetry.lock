@@ -94,7 +94,7 @@ develop = false
 [package.source]
 type = "git"
 url = "https://gitlab.com/elixire/hail.git"
-reference = "master"
+reference = "0c1570ded9fc17d40619edf559e72664ca3fb5b7"
 resolved_reference = "0c1570ded9fc17d40619edf559e72664ca3fb5b7"
 
 [[package]]
@@ -263,7 +263,7 @@ python-versions = "*"
 
 [[package]]
 name = "violet"
-version = "0.2.3"
+version = "0.3.0"
 description = ""
 category = "main"
 optional = false
@@ -271,14 +271,14 @@ python-versions = "==3.*,>=3.7.0"
 develop = false
 
 [package.dependencies]
-asyncpg = "0.20.1"
-hail = "rev master"
+asyncpg = ">0.20"
+hail = "rev 0c1570ded9fc17d40619edf559e72664ca3fb5b7"
 
 [package.source]
 type = "git"
 url = "https://gitlab.com/elixire/violet"
-reference = "master"
-resolved_reference = "4b36cdf30c11e9e64d909f95b0cc8b3cfd513f46"
+reference = "7324584938f7c8f64877c03dd7534b4ece455844"
+resolved_reference = "7324584938f7c8f64877c03dd7534b4ece455844"
 
 [[package]]
 name = "werkzeug"
@@ -305,7 +305,7 @@ h11 = ">=0.9.0,<1"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.9"
-content-hash = "7918f34004881c6cc4cbf94e734141d35a75ff27c7c5ca5e3059d2951e2eebfb"
+content-hash = "f49a9a5a20083248e47a0261f80c4f146aa338090d308a1c25b288c83a66927a"
 
 [metadata.files]
 agnostic = [
