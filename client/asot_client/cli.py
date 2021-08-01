@@ -43,8 +43,6 @@ async def recv_json(ws):
 
 async def async_main():
     logging.basicConfig(level=logging.INFO)
-    user_id = sys.argv[1]
-    port = sys.argv[2]
 
     parser = argparse.ArgumentParser(description="asot client")
     parser.add_argument("server_url", help="asot server url")
@@ -52,7 +50,6 @@ async def async_main():
     parser.add_argument("port", type=int, help="port to tunnel in localhost")
 
     args = parser.parse_args()
-    print(args)
 
     api = APIClient(args.server_url)
     # user = await api.get_user(args.user_id)
@@ -62,7 +59,7 @@ async def async_main():
     async with websockets.connect(
         f"{api.server_url}/control".replace("http", "ws")
     ) as websocket:
-        await send_json(websocket, {"op": 1, "d": {"user_id": user_id}})
+        await send_json(websocket, {"op": 1, "d": {"user_id": args.user_id}})
         reply = await recv_json(websocket)
         assert reply["op"] == 2
         while True:
