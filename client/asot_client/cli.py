@@ -87,7 +87,7 @@ async def async_main():
                             "response": {
                                 "status_code": resp.status_code,
                                 "headers": dict(resp.headers),
-                                "content": body,
+                                "body": body,
                             },
                         },
                     },

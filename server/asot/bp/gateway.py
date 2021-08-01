@@ -2,8 +2,9 @@
 # Copyright 2021, Luna and asot contributors
 # SPDX-License-Identifier: BSD-3-Clause
 
+import base64
 
-from quart import Blueprint, request, current_app as app
+from quart import Blueprint, request, current_app as app, make_response
 
 bp = Blueprint("gateway", __name__)
 
@@ -46,6 +47,10 @@ async def reroute(session_id):
     # copy the object so that we can clean it up on the session store
     # before we return it to the client
 
-    response_copy = dict(req.response)
+    response = dict(req.response)
     app.sessions.requests.pop(request_id)
-    return repr(response_copy), 200
+    body = base64.b64decode(response["body"]).decode()
+    final_response = await make_response((body, response["status_code"]))
+    for key, value in response["headers"].items():
+        final_response.headers[key] = value
+    return final_response
