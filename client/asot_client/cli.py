@@ -44,6 +44,25 @@ async def recv_json(ws):
     return json.loads(msg)
 
 
+async def send_http_response(websocket, request_id, status_code, headers, body_string):
+    body = base64.b64encode(body_string).decode()
+
+    await send_json(
+        websocket,
+        {
+            "op": 6,
+            "d": {
+                "request_id": request_id,
+                "response": {
+                    "status_code": status_code,
+                    "headers": headers,
+                    "body": body,
+                },
+            },
+        },
+    )
+
+
 async def async_main():
     logging.basicConfig(level=logging.INFO)
 
@@ -73,25 +92,28 @@ async def async_main():
                 data = reply["d"]
                 path = data["path"]
                 headers = data["headers"]
-                # TODO body
-                resp = await api.httpx.get(
-                    f"http://localhost:{args.port}{path}", headers=headers
-                )
-                body = base64.b64encode(resp.content).decode()
-                await send_json(
-                    websocket,
-                    {
-                        "op": 6,
-                        "d": {
-                            "request_id": data["request_id"],
-                            "response": {
-                                "status_code": resp.status_code,
-                                "headers": dict(resp.headers),
-                                "body": body,
-                            },
-                        },
-                    },
-                )
+                # TODO give body to request
+                try:
+                    resp = await api.httpx.get(
+                        f"http://localhost:{args.port}{path}", headers=headers
+                    )
+
+                    await send_http_response(
+                        websocket,
+                        data["request_id"],
+                        resp.status_code,
+                        dict(resp.headers),
+                        resp.content,
+                    )
+
+                except httpx.RequestError as exc:
+                    await send_http_response(
+                        websocket,
+                        data["request_id"],
+                        502,
+                        {"Reply-By-Client": 1},
+                        b"failed to connect to webapp",
+                    )
 
 
 def main_cli():
