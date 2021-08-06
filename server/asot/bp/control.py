@@ -33,6 +33,7 @@ class OperationType(Enum):
     HEARTBEAT_ACK = 4
     HTTP_REQUEST = 5
     HTTP_RESPONSE = 6
+    RESUME = 7
 
 
 async def receive_any():
@@ -45,15 +46,20 @@ async def receive_any():
         raise WebsocketClose(CloseCodes.INVALID_JSON, "Invalid JSON")
 
 
-async def recv_op(op: OperationType):
-    data = await receive_any()
-    if "op" not in data:
+async def recv_any_op():
+    message = await receive_any()
+    if "op" not in message:
         raise WebsocketClose(
             CloseCodes.INVALID_MESSAGE, "Invalid Message (no op field)"
         )
 
-    if "d" not in data:
+    if "d" not in message:
         raise WebsocketClose(CloseCodes.INVALID_MESSAGE, "Invalid Message (no d field)")
+    return message
+
+
+async def recv_op(op: OperationType):
+    data = await recv_any_op()
 
     if data["op"] != op.value:
         raise WebsocketClose(
@@ -91,16 +97,29 @@ class WebsocketFailMode(violet.fail_modes.FailMode):
 
 async def do_login():
     await websocket.accept()
-    login = await recv_op(OperationType.LOGIN)
-    user_id = login["user_id"]
+    message = await recv_any_op()
+    opcode = OperationType(message["op"])
 
-    user = await User.fetch(user_id)
-    if user is None:
-        raise WebsocketClose(CloseCodes.FAILED_AUTH, "unknown user")
+    # can either be LOGIN or RESUME
+    if opcode == OperationType.LOGIN:
+        login = message["d"]
+        user_id = login["user_id"]
 
-    session_id = app.sessions.add_client(user)
-    g.state = WebsocketConnectionState(user, None)
-    await send_op(OperationType.WELCOME, {"session_id": session_id})
+        user = await User.fetch(user_id)
+        if user is None:
+            raise WebsocketClose(CloseCodes.FAILED_AUTH, "unknown user")
+
+        session_id = app.sessions.add_client(user)
+        g.state = WebsocketConnectionState(user, None)
+        await send_op(OperationType.WELCOME, {"session_id": session_id})
+    elif opcode == OperationType.RESUME:
+        # TODO
+        raise NotImplementedError()
+    else:
+        raise WebsocketClose(
+            CloseCodes.INVALID_MESSAGE,
+            "Unexpected opcode as first message (can only be Login or Resume)",
+        )
 
 
 @dataclass
@@ -192,7 +211,6 @@ async def queue_processor(state):
         log.info("got control message %r", control_message)
         dispatch_type, data = control_message
 
-        # TODO impl internal control messages
         if dispatch_type == 1:
             request_id = data
             req = app.sessions.requests[request_id]
