@@ -63,6 +63,24 @@ async def send_http_response(websocket, request_id, status_code, headers, body_s
     )
 
 
+class OperationType(Enum):
+    LOGIN = 1
+    WELCOME = 2
+    HEARTBEAT = 3
+    HEARTBEAT_ACK = 4
+    HTTP_REQUEST = 5
+    HTTP_RESPONSE = 6
+    RESUME = 7
+
+
+class CloseCodes:
+    ERROR = 4000
+    FAILED_AUTH = 4001
+    HEARTBEAT_EXPIRE = 4002
+    INVALID_JSON = 4003
+    INVALID_MESSAGE = 4004
+
+
 async def async_main():
     logging.basicConfig(level=logging.INFO)
 
@@ -81,14 +99,22 @@ async def async_main():
     async with websockets.connect(
         f"{api.server_url}/control".replace("http", "ws")
     ) as websocket:
-        await send_json(websocket, {"op": 1, "d": {"user_id": args.user_id}})
+
+        # after LOGIN, assert we get a WELCOME
+        await send_json(
+            websocket, {"op": OperationType.LOGIN, "d": {"user_id": args.user_id}}
+        )
         reply = await recv_json(websocket)
-        assert reply["op"] == 2
+        opcode = OperationType(reply["op"])
+        assert opcode == OperationType.WELCOME
+
         while True:
             reply = await recv_json(websocket)
-            if reply["op"] == 3:
-                await send_json(websocket, {"op": 4, "d": None})
-            elif reply["op"] == 5:
+            if opcode == OperationType.HEARTBEAT:
+                await send_json(
+                    websocket, {"op": OperationType.HEARTBEAT_ACK, "d": None}
+                )
+            elif opcode == OperationType.HTTP_REQUEST:
                 data = reply["d"]
                 path = data["path"]
                 headers = data["headers"]
