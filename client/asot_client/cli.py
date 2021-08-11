@@ -132,6 +132,19 @@ async def handle_message(ctx, reply):
             )
 
 
+async def connect_and_run(api, args):
+    # TODO: parse given server url so we can change scheme in a safer manner
+    async with websockets.connect(
+        f"{api.server_url}/control".replace("http", "ws")
+    ) as websocket:
+        await do_login(websocket, args.user_id)
+
+        ctx = LoopContext(api, args, websocket)
+        while True:
+            reply = await recv_json(ctx.websocket)
+            await do_main_loop(ctx, reply)
+
+
 async def async_main():
     logging.basicConfig(level=logging.INFO)
 
@@ -147,16 +160,11 @@ async def async_main():
     # print(user)
 
     while True:
-        # TODO: parse given server url so we can change scheme in a safer manner
-        async with websockets.connect(
-            f"{api.server_url}/control".replace("http", "ws")
-        ) as websocket:
-            await do_login(websocket, args.user_id)
-
-            ctx = LoopContext(api, args, websocket)
-            while True:
-                reply = await recv_json(ctx.websocket)
-                await do_main_loop(ctx, reply)
+        try:
+            await connect_and_run(api, args)
+        except websockets.exceptions.ConnectionClosed as exc:
+            log.error("websocket connection closed %r, retrying in 5sec", repr(exc))
+        await asyncio.sleep(1)
 
 
 def main_cli():
