@@ -174,7 +174,7 @@ async def async_main():
         log.warning("Reconnecting to redis")
         try:
             await connect_and_run(api, args, retry_ctx)
-        except websockets.ConnectionClosed as exc:
+        except (websockets.ConnectionClosed, OSError) as exc:
             sleep_secs = random.uniform(
                 0,
                 min(
