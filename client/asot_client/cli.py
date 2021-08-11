@@ -1,12 +1,14 @@
 # asot: Localhost tunneling
 # Copyright 2021, Luna and asot contributors
 # SPDX-License-Identifier: BSD-3-Clause
-import sys
 import base64
 import argparse
 import logging
 import asyncio
 import json
+from enum import Enum
+from dataclasses import dataclass
+from typing import Any
 
 import httpx
 import websockets
@@ -50,7 +52,7 @@ async def send_http_response(websocket, request_id, status_code, headers, body_s
     await send_json(
         websocket,
         {
-            "op": 6,
+            "op": OperationType.HTTP_RESPONSE.value,
             "d": {
                 "request_id": request_id,
                 "response": {
@@ -81,6 +83,55 @@ class CloseCodes:
     INVALID_MESSAGE = 4004
 
 
+async def do_login(websocket, user_id):
+    # after LOGIN, assert we get a WELCOME
+    await send_json(
+        websocket, {"op": OperationType.LOGIN.value, "d": {"user_id": user_id}}
+    )
+    reply = await recv_json(websocket)
+    opcode = OperationType(reply["op"])
+    assert opcode == OperationType.WELCOME
+
+
+@dataclass
+class LoopContext:
+    api: APIClient
+    args: Any
+    websocket: Any
+
+
+async def handle_message(ctx, reply):
+    opcode = OperationType(reply["op"])
+    if opcode == OperationType.HEARTBEAT:
+        await send_json(ctx.websocket, {"op": OperationType.HEARTBEAT_ACK, "d": None})
+    elif opcode == OperationType.HTTP_REQUEST:
+        data = reply["d"]
+        path = data["path"]
+        headers = data["headers"]
+        # TODO give body to request
+        try:
+            resp = await ctx.api.httpx.get(
+                f"http://localhost:{ctx.args.port}{path}", headers=headers
+            )
+
+            await send_http_response(
+                ctx.websocket,
+                data["request_id"],
+                resp.status_code,
+                dict(resp.headers),
+                resp.content,
+            )
+
+        except httpx.RequestError as exc:
+            await send_http_response(
+                ctx.websocket,
+                data["request_id"],
+                502,
+                {"Reply-By-Client": 1},
+                b"failed to connect to webapp",
+            )
+
+
 async def async_main():
     logging.basicConfig(level=logging.INFO)
 
@@ -95,51 +146,17 @@ async def async_main():
     # user = await api.get_user(args.user_id)
     # print(user)
 
-    # TODO: parse given server url so we can change scheme in a safer manner
-    async with websockets.connect(
-        f"{api.server_url}/control".replace("http", "ws")
-    ) as websocket:
+    while True:
+        # TODO: parse given server url so we can change scheme in a safer manner
+        async with websockets.connect(
+            f"{api.server_url}/control".replace("http", "ws")
+        ) as websocket:
+            await do_login(websocket, args.user_id)
 
-        # after LOGIN, assert we get a WELCOME
-        await send_json(
-            websocket, {"op": OperationType.LOGIN, "d": {"user_id": args.user_id}}
-        )
-        reply = await recv_json(websocket)
-        opcode = OperationType(reply["op"])
-        assert opcode == OperationType.WELCOME
-
-        while True:
-            reply = await recv_json(websocket)
-            if opcode == OperationType.HEARTBEAT:
-                await send_json(
-                    websocket, {"op": OperationType.HEARTBEAT_ACK, "d": None}
-                )
-            elif opcode == OperationType.HTTP_REQUEST:
-                data = reply["d"]
-                path = data["path"]
-                headers = data["headers"]
-                # TODO give body to request
-                try:
-                    resp = await api.httpx.get(
-                        f"http://localhost:{args.port}{path}", headers=headers
-                    )
-
-                    await send_http_response(
-                        websocket,
-                        data["request_id"],
-                        resp.status_code,
-                        dict(resp.headers),
-                        resp.content,
-                    )
-
-                except httpx.RequestError as exc:
-                    await send_http_response(
-                        websocket,
-                        data["request_id"],
-                        502,
-                        {"Reply-By-Client": 1},
-                        b"failed to connect to webapp",
-                    )
+            ctx = LoopContext(api, args, websocket)
+            while True:
+                reply = await recv_json(ctx.websocket)
+                await do_main_loop(ctx, reply)
 
 
 def main_cli():
