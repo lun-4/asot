@@ -1,6 +1,7 @@
 # asot: Localhost tunneling
 # Copyright 2021, Luna and asot contributors
 # SPDX-License-Identifier: BSD-3-Clause
+import random
 import base64
 import argparse
 import logging
@@ -132,17 +133,26 @@ async def handle_message(ctx, reply):
             )
 
 
-async def connect_and_run(api, args):
+async def connect_and_run(api, args, retry_ctx):
     # TODO: parse given server url so we can change scheme in a safer manner
     async with websockets.connect(
         f"{api.server_url}/control".replace("http", "ws")
     ) as websocket:
         await do_login(websocket, args.user_id)
 
+        retry_ctx.current = 0
         ctx = LoopContext(api, args, websocket)
         while True:
             reply = await recv_json(ctx.websocket)
             await do_main_loop(ctx, reply)
+
+
+@dataclass
+class RetryContext:
+    retry_cap: float = 20.0
+    retry_base: float = 0.7
+
+    current: int = 0
 
 
 async def async_main():
@@ -159,12 +169,26 @@ async def async_main():
     # user = await api.get_user(args.user_id)
     # print(user)
 
+    retry_ctx = RetryContext()
     while True:
+        log.warning("Reconnecting to redis")
         try:
-            await connect_and_run(api, args)
-        except websockets.exceptions.ConnectionClosed as exc:
-            log.error("websocket connection closed %r, retrying in 5sec", repr(exc))
-        await asyncio.sleep(1)
+            await connect_and_run(api, args, retry_ctx)
+        except websockets.ConnectionClosed as exc:
+            sleep_secs = random.uniform(
+                0,
+                min(
+                    retry_ctx.retry_cap,
+                    retry_ctx.retry_base * 2 ** retry_ctx.current,
+                ),
+            )
+            log.error(
+                "websocket connection closed %r, retrying in %.2fsec",
+                repr(exc),
+                sleep_secs,
+            )
+            await asyncio.sleep(sleep_secs)
+        retry_ctx.current += 1
 
 
 def main_cli():
