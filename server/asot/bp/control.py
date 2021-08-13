@@ -101,6 +101,64 @@ class WebsocketFailMode(violet.fail_modes.FailMode):
             await violet.fail_modes.LogOnly().handle(job, exc, state)
 
 
+async def register_session(session_id, user_id):
+    await execute_and_commit(
+        app.db,
+        """
+        INSERT INTO asot_sessions
+            (user_id, session_id, created_at)
+        VALUES
+            (?, ?, ?)
+        """,
+        (user_id, session_id, datetime.utcnow().isoformat()),
+    )
+
+
+async def fetch_session_id(user_id):
+    async with app.db.execute(
+        """
+        SELECT session_id, created_at FROM asot_sessions
+        WHERE user_id = ?
+        """,
+        (user_id,),
+    ) as cursor:
+        row = await cursor.fetchone()
+
+    # if we don't find a pre-existing session for the given user, create
+    # a new one, register it on db
+    if row is None:
+        session_id = app.sessions.add_client(user_id)
+        await register_session(session_id, user_id)
+        return session_id
+
+    # else, attempt to restore it from the db into memory
+    # but only if the session is younger than 8 hours.
+    existing_session_id, created_at_str = row
+    created_at = datetime.fromisoformat(created_at_str)
+    now = datetime.utcnow()
+    delta = now - created_at
+    if delta.total_seconds() > (8 * 3600):
+        # if a session is older than 8h, destroy it in the db and create
+        # a new one, register it on db
+        await execute_and_commit(
+            app.db,
+            """
+            DELETE FROM asot_sessions
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        )
+
+        # create new session
+        session_id = app.sessions.add_client(user_id)
+        log.info("created session %r", session_id)
+
+        return session_id
+    else:
+        # session is young, just reuse session
+        return app.sessions.add_with_session_id(user_id, existing_session_id)
+
+
 async def do_login():
     await websocket.accept()
     message = await recv_any_op()
@@ -115,58 +173,9 @@ async def do_login():
         if user is None:
             raise WebsocketClose(CloseCodes.FAILED_AUTH, "unknown user")
 
-        async with app.db.execute(
-            """
-            SELECT session_id, created_at FROM asot_sessions
-            WHERE user_id = ?
-            """,
-            (user_id,),
-        ) as cursor:
-            row = await cursor.fetchone()
-            # TODO: refactor this into functions
-            if row is None:
-                # create new session
-                session_id = app.sessions.add_client(user)
-                g.state = WebsocketConnectionState(user, None)
-            else:
-                existing_session_id, created_at_str = row
-                created_at = datetime.fromisoformat(created_at_str)
-                now = datetime.utcnow()
-                delta = now - created_at
-                if delta.total_seconds() > (8 * 3600):
-                    # if a session has been allocated for 8h (a workday), reset them
-                    await execute_and_commit(
-                        app.db,
-                        """
-                        DELETE FROM asot_sessions
-                        WHERE user_id = ?
-                        """,
-                        (user_id,),
-                    )
+        g.state = WebsocketConnectionState(user, None)
 
-                    # create new session
-                    session_id = app.sessions.add_client(user)
-                    log.info("created session %r", session_id)
-                    g.state = WebsocketConnectionState(user, None)
-
-                    await execute_and_commit(
-                        app.db,
-                        """
-                        INSERT INTO asot_sessions
-                            (user_id, session_id, created_at)
-                        VALUES
-                            (?, ?, ?)
-                        """,
-                        (user_id, session_id, datetime.utcnow().isoformat()),
-                    )
-
-                else:
-                    # reuse session
-                    log.info("reusing session %r", existing_session_id)
-                    session_id = app.sessions.add_with_session_id(
-                        user, existing_session_id
-                    )
-                    g.state = WebsocketConnectionState(user, None)
+        session_id = await fetch_session_id(user_id)
 
         await send_op(OperationType.WELCOME, {"session_id": session_id})
     elif opcode == OperationType.RESUME:

@@ -34,14 +34,14 @@ class SessionManager:
         self.sessions = {}
         self.requests = {}
 
-    def add_with_session_id(self, user, session_id):
-        session = Session(user_id=user.id, queue=asyncio.Queue())
+    def add_with_session_id(self, user_id, session_id):
+        session = Session(user_id=user_id, queue=asyncio.Queue())
         self.sessions[session_id] = session
-        self.user_to_session[user.id] = session_id
+        self.user_to_session[user_id] = session_id
         return session_id
 
-    def add_client(self, user):
-        return self.add_with_session_id(user, secrets.token_hex(6))
+    def add_client(self, user_id):
+        return self.add_with_session_id(user_id, secrets.token_hex(6))
 
     def get_by_user(self, user_id: str):
         return self.sessions[self.user_to_session[user_id]]
