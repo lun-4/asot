@@ -5,6 +5,7 @@
 import json
 import asyncio
 import logging
+from datetime import datetime
 from enum import Enum
 from typing import Optional
 from dataclasses import dataclass
@@ -34,6 +35,11 @@ class OperationType(Enum):
     HTTP_REQUEST = 5
     HTTP_RESPONSE = 6
     RESUME = 7
+
+
+async def execute_and_commit(db, stmt, args):
+    async with db.execute(stmt, args) as cur:
+        await db.commit()
 
 
 async def receive_any():
@@ -109,8 +115,59 @@ async def do_login():
         if user is None:
             raise WebsocketClose(CloseCodes.FAILED_AUTH, "unknown user")
 
-        session_id = app.sessions.add_client(user)
-        g.state = WebsocketConnectionState(user, None)
+        async with app.db.execute(
+            """
+            SELECT session_id, created_at FROM asot_sessions
+            WHERE user_id = ?
+            """,
+            (user_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            # TODO: refactor this into functions
+            if row is None:
+                # create new session
+                session_id = app.sessions.add_client(user)
+                g.state = WebsocketConnectionState(user, None)
+            else:
+                existing_session_id, created_at_str = row
+                created_at = datetime.fromisoformat(created_at_str)
+                now = datetime.utcnow()
+                delta = now - created_at
+                if delta.total_seconds() > (8 * 3600):
+                    # if a session has been allocated for 8h (a workday), reset them
+                    await execute_and_commit(
+                        app.db,
+                        """
+                        DELETE FROM asot_sessions
+                        WHERE user_id = ?
+                        """,
+                        (user_id,),
+                    )
+
+                    # create new session
+                    session_id = app.sessions.add_client(user)
+                    log.info("created session %r", session_id)
+                    g.state = WebsocketConnectionState(user, None)
+
+                    await execute_and_commit(
+                        app.db,
+                        """
+                        INSERT INTO asot_sessions
+                            (user_id, session_id, created_at)
+                        VALUES
+                            (?, ?, ?)
+                        """,
+                        (user_id, session_id, datetime.utcnow().isoformat()),
+                    )
+
+                else:
+                    # reuse session
+                    log.info("reusing session %r", existing_session_id)
+                    session_id = app.sessions.add_with_session_id(
+                        user, existing_session_id
+                    )
+                    g.state = WebsocketConnectionState(user, None)
+
         await send_op(OperationType.WELCOME, {"session_id": session_id})
     elif opcode == OperationType.RESUME:
         # TODO
