@@ -197,16 +197,13 @@ async def do_main_loop():
     user = g.state.user
 
     task_ids = (
-        f"queue_worker:{user.id}",
+        (f"queue_worker:{user.id}"),
         (f"receiver_worker:{user.id}"),
         (f"heartbeat:{user.id}"),
     )
 
     for task_id in task_ids:
-        existing_task = app.sched.tasks.get(task_id)
-        if existing_task is None:
-            continue
-        existing_task.cancel(msg="replaced")
+        app.sched.stop(task_id)
 
     tasks = [
         app.sched.spawn(
