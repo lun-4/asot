@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import base64
+import asyncio
 
 from quart import Blueprint, request, current_app as app, make_response
 
@@ -36,21 +37,35 @@ async def on_request():
 
 
 async def reroute(session_id):
-    # once we get a reroute, create a request on the session manager,
-    # it will dispatch to the queue, and then we wait for a response
+
+    # reroutes work like this:
+    # - create a request on the queue of the session
+    # - the queue_worker on the control bp is going to translate the internal
+    #   "we have a request" python essage to a "we have a request" websocket message
+    # - the client replies with http response websocket message
+    # - the receiver_worker task finds the request object and sets the event
+    # - WE MUST CLEAN THE REQUEST OBJECT AFTERWARDS
+
+    session = app.sessions.get_by_id(session_id)
+    if session is None:
+        return "session not found", 404
+
     request_id = await app.sessions.send_request(session_id)
     req = app.sessions.requests[request_id]
-    # TODO timeouts, clean it all up afterwards
-    await req.response_event.wait()
+    try:
+        await asyncio.wait_for(req.response_event.wait(), timeout=30)
+        # since we need to clean everything up, make a copy of the
+        # response so we can reply with a quart response, while also being
+        # able to pop() the request from the system
+        client_response = dict(req.response)
+    except asyncio.TimeoutError:
+        return "asot client timed out", 502
+    finally:
+        app.sessions.requests.pop(request_id)
 
-    # once the event is set, we must have a response
-    # copy the object so that we can clean it up on the session store
-    # before we return it to the client
-
-    response = dict(req.response)
-    app.sessions.requests.pop(request_id)
-    body = base64.b64decode(response["body"]).decode()
-    final_response = await make_response((body, response["status_code"]))
-    for key, value in response["headers"].items():
+    # convert from internal response object to quart response
+    body = base64.b64decode(client_response["body"]).decode()
+    final_response = await make_response((body, client_response["status_code"]))
+    for key, value in client_response["headers"].items():
         final_response.headers[key] = value
     return final_response

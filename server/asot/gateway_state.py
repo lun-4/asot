@@ -47,10 +47,11 @@ class SessionManager:
         return self.sessions[self.user_to_session[user_id]]
 
     def get_by_id(self, session_id: str):
-        return self.sessions[session_id]
+        return self.sessions.get(session_id)
 
     async def send_request(self, session_id) -> asyncio.Event:
         sess = self.get_by_id(session_id)
+        assert sess is not None
 
         request_id = secrets.token_hex(32)
         response_event = asyncio.Event()
