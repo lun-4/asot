@@ -104,7 +104,9 @@ class LoopContext:
 async def handle_message(ctx, reply):
     opcode = OperationType(reply["op"])
     if opcode == OperationType.HEARTBEAT:
-        await send_json(ctx.websocket, {"op": OperationType.HEARTBEAT_ACK, "d": None})
+        await send_json(
+            ctx.websocket, {"op": OperationType.HEARTBEAT_ACK.value, "d": None}
+        )
     elif opcode == OperationType.HTTP_REQUEST:
         data = reply["d"]
         path = data["path"]
@@ -144,7 +146,7 @@ async def connect_and_run(api, args, retry_ctx):
         ctx = LoopContext(api, args, websocket)
         while True:
             reply = await recv_json(ctx.websocket)
-            await do_main_loop(ctx, reply)
+            await handle_message(ctx, reply)
 
 
 @dataclass
