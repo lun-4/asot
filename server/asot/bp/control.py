@@ -149,6 +149,8 @@ async def fetch_session_id(user_id):
             (user_id,),
         )
 
+        app.sessions.delete_session(existing_session_id)
+
         # create new session
         session_id = app.sessions.add_client(user_id)
         log.info("created session %r", session_id)

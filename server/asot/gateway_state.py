@@ -74,3 +74,13 @@ class SessionManager:
             )
         )
         return request_id
+
+    def delete_session(self, session_id):
+        sess = self.sessions.pop(session_id)
+        mapped_session = self.user_to_session[sess.user_id]
+
+        # prevent race conditions by only deleting our own
+        # session data. if a new session overwrote user_to_session
+        # we MUST NOT interfere with it
+        if mapped_session == session_id:
+            self.user_to_session.pop(user_id)
