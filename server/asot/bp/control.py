@@ -129,6 +129,7 @@ async def fetch_session_id(user_id):
     if row is None:
         session_id = app.sessions.add_client(user_id)
         await register_session(session_id, user_id)
+        log.info("created session %r", session_id)
         return session_id
 
     # else, attempt to restore it from the db into memory
@@ -149,6 +150,7 @@ async def fetch_session_id(user_id):
             (user_id,),
         )
 
+        log.info("deleted session %r", existing_session_id)
         app.sessions.delete_session(existing_session_id)
 
         # create new session
@@ -158,6 +160,7 @@ async def fetch_session_id(user_id):
         return session_id
     else:
         # session is young, just reuse session
+        log.info("reusing session %r", existing_session_id)
         return app.sessions.add_with_session_id(user_id, existing_session_id)
 
 

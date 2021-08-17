@@ -36,6 +36,9 @@ class SessionManager:
         self.requests = {}
 
     def add_with_session_id(self, user_id, session_id):
+        if session_id in self.sessions:
+            return session_id
+
         session = Session(user_id=user_id, queue=asyncio.Queue())
         self.sessions[session_id] = session
         self.user_to_session[user_id] = session_id
