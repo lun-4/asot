@@ -173,10 +173,8 @@ async def do_login():
         if user is None:
             raise WebsocketClose(CloseCodes.FAILED_AUTH, "unknown user")
 
-        g.state = WebsocketConnectionState(user, None)
-
         session_id = await fetch_session_id(user_id)
-
+        g.state = WebsocketConnectionState(user, session_id, None)
         await send_op(OperationType.WELCOME, {"session_id": session_id})
     elif opcode == OperationType.RESUME:
         # TODO
@@ -193,6 +191,7 @@ class WebsocketConnectionState:
     """Holds specific state about this connection"""
 
     user: User
+    session_id: str
     heartbeat_wait_task: Optional[asyncio.Task]
 
 
@@ -332,9 +331,19 @@ async def process_incoming_message(state, message):
             state.heartbeat_wait_task.cancel()
     elif opcode == OperationType.HTTP_RESPONSE:
         data = message["d"]
-        # TODO handle keyerror (request timed out and client attempts to reply)
-        app.sessions.requests[data["request_id"]].response = data["response"]
-        app.sessions.requests[data["request_id"]].response_event.set()
+
+        request_id = data["request_id"]
+        incoming_request = app.sessions.requests.get(request_id)
+        if incoming_request is None:
+            log.warning("client attempted to reply to unknown request")
+            return
+
+        if incoming_request.session_id != g.state.session_id:
+            log.warning("client attempted to reply to unowned request")
+            return
+
+        incoming_request.response = data["response"]
+        incoming_request.response_event.set()
     else:
         raise WebsocketClose(CloseCodes.INVALID_MESSAGE, "Invalid opcode value")
 

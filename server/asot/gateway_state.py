@@ -19,6 +19,7 @@ class Session:
 
 @dataclass
 class IncomingRequest:
+    session_id: str
     path: str
     headers: dict
     body: str
@@ -57,6 +58,7 @@ class SessionManager:
         response_event = asyncio.Event()
         body: str = base64.b64encode(await request.get_data()).decode()
         self.requests[request_id] = IncomingRequest(
+            session_id,
             request.path,
             dict(request.headers),
             body,
