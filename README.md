@@ -1,5 +1,7 @@
 # asot
 
+**asot is PoC level software. just use https://github.com/ekzhang/bore**
+
 "a series of tubes".
 
 tcp tunneling to localhost in a BYOOP model, bring your own on-premises.
